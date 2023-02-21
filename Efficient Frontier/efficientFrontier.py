@@ -27,17 +27,6 @@ def negativeSharpRatio(weights, meanReturns, covMatrix, riskFreeRate=0):
     pReturns, pStd = portfolioPerformance(weights, meanReturns, covMatrix)
     return -(pReturns - riskFreeRate) / pStd
 
-def negativeSortinoRatio(weights, meanReturns, covMatrix, targetReturn):
-    pReturns, pStd = portfolioPerformance(weights, meanReturns, covMatrix)
-
-    temp = np.minimum(0, pReturns - targetReturn)
-    temp_expectation = np.mean(temp)
-    downside_dev = np.sqrt(temp_expectation)
-
-    # calculate sortino ratio
-    sortino_ratio = np.mean(pReturns - targetReturn) / downside_dev
-    return -(sortino_ratio)
-
 def maxSharpeRatio(meanReturns, covMatrix, riskFreeRate = 0, constraintSet=(0,1)):
     # Minimize the negative sharpe ratio by altering the weights of the portfolio
     numAssets = len(meanReturns)
@@ -54,19 +43,25 @@ def maxSharpeRatio(meanReturns, covMatrix, riskFreeRate = 0, constraintSet=(0,1)
                         method = 'SLSQP', bounds=bounds, constraints=constraints)
     return result
 
-def maxSortinoRatio(meanReturns, covMatrix, riskFreeRate = 0, constraintSet=(0,1)):
-    # Minimize the negative sharpe ratio by altering the weights of the portfolio
+def maxSortinoRatio(meanReturns, riskFreeRate):
+    # function to calculate the sortino ratio
+    def negativeSortinoRatio(weights):
+        portfolio_return = np.dot(meanReturns, weights)
+        negative_returns = np.minimum(returns - portfolio_return, 0)
+        downside_deviation = np.sqrt(np.mean(negative_returns ** 2))
+        
+        return -(portfolio_return - riskFreeRate) / downside_deviation
+
     numAssets = len(meanReturns)
-    args = (meanReturns, covMatrix, riskFreeRate)
+    initial_weights = np.ones(numAssets) / numAssets
+    
+    # define the optimization constraints (weights must sum to 1)
+    constraints = [{'type': 'eq', 'fun': lambda weights: np.sum(weights) - 1}]
+    
+    # define the bounds on the weights (between 0-1)
+    bounds = [(0,1)] * numAssets
 
-    # all of the summations of the weights in the portfolio have to
-    # add up to 1
-    constraints = ({ 'type': 'eq', 'fun': lambda x: np.sum(x) - 1})
-    bound = constraintSet
-    bounds = tuple(bound for asset in range(numAssets))
-
-    # first guess is equal distribution
-    result = sc.minimize(negativeSortinoRatio, numAssets * [1./numAssets], args=args,
+    result = sc.minimize(negativeSortinoRatio, initial_weights,
                         method = 'SLSQP', bounds=bounds, constraints=constraints)
     return result
 
@@ -92,14 +87,14 @@ maxSharpeRatio, maxWeights = sharpeResult['fun'], sharpeResult['x']
 '''
     Sortino Ratio Calculation
 '''
-'''
-meanReturns, covMatrix = getData(stockList, 'sortino', start=startDate, end=endDate)
+
+meanReturns, covMatrix = getData(stockList, start=startDate, end=endDate)
 returns, std = portfolioPerformance(weights, meanReturns, covMatrix)
 
-sortinoResult = maxSortinoRatio(meanReturns, covMatrix)
+sortinoResult = maxSortinoRatio(meanReturns, 0)
 maxSortinoRatio, maxWeights = sortinoResult['fun'], sortinoResult['x']
-'''
+
 
 print(maxSharpeRatio, maxWeights)
-# print(maxSortinoRatio, maxWeights)
+print(maxSortinoRatio, maxWeights)
 
