@@ -12,7 +12,7 @@ def getData(stocks, start, end):
     covMatrix = returns.cov()
     return meanReturns, covMatrix
 
-def portfolioPerformance(weights, meanReturns, covMatrix, riskFreeRate):
+def portfolioPerformance(weights, meanReturns, covMatrix, riskFreeRate=0):
     returns = np.sum(meanReturns*weights)*252
     std = np.sqrt(np.dot(weights.T,np.dot(covMatrix, weights)))*np.sqrt(252)
     sharpe = (returns - riskFreeRate) / std
@@ -30,6 +30,20 @@ def maxSharpeRatio(meanReturns, covMatrix, riskFreeRate = 0, constraintSet=(0,1)
     bound = constraintSet
     bounds = tuple(bound for asset in range(numAssets))
     result = sc.minimize(negativeSharpeRatio, numAssets*[1./numAssets], args=args, method='SLSQP', bounds=bounds, constraints=constraints)
+    return result
+
+def portfolioVarianceSharpe(weights, meanReturns, covMatrix):
+    return portfolioPerformance(weights, meanReturns, covMatrix)[1]
+
+def minimizeVarianceSharpe(meanReturns, covMatrix, riskFreeRate=0, constraintSet=(0,1)):
+    # minimize the portfolio variance by altering the weights/allocation of assets in the portfolio
+    numAssets = len(meanReturns)
+    args = (meanReturns, covMatrix)
+    constraints = ({'type': 'eq', 'fun': lambda x: np.sum(x) - 1})
+    bound = constraintSet
+    bounds = tuple(bound for asset in range(numAssets))
+    result = sc.minimize(portfolioVarianceSharpe, numAssets*[1./numAssets], 
+                         args=args, method='SLSQP', bounds=bounds, constraints=constraints)
     return result
 
 def getData2(stocks, start, end):
@@ -63,6 +77,17 @@ def maxSortinoRatio(meanReturns, covMatrix, riskFreeRate=0.0, mar=0.0, constrain
     result = sc.minimize(negativeSortinoRatio, numAssets*[1./numAssets], args=args, method='SLSQP', bounds=bounds, constraints=constraints)
     return result
 
+def portfolioVarianceSortino(weights, meanReturns, covMatrix):
+    return portfolioPerformance2(weights, meanReturns, covMatrix)[1]
+
+def minimizeVarianceSortino(meanReturns, covMatrix, riskFreeRate=0, constraintSet=(0,1)):
+    numAssets = len(meanReturns)
+    args = (meanReturns, covMatrix)
+    constraints = ({'type': 'eq', 'fun': lambda x: np.sum(x) - 1})
+    bounds = tuple(constraintSet for asset in range(numAssets))
+    result = sc.minimize(portfolioVarianceSortino, numAssets*[1./numAssets], args=args, method='SLSQP', bounds=bounds, constraints=constraints)
+    return result
+
 stockList = ['AAPL', 'MSFT', 'JNJ']
 endDate = '2022-12-31'
 startDate = '2022-01-01'
@@ -75,8 +100,15 @@ weights = np.array([0.3, 0.5, 0.2])
 # Example usage
 meanReturns, covMatrix = getData(['AAPL', 'WMT', 'HD', 'AMZN'], '2021-01-01', '2022-01-01')
 result = maxSharpeRatio(meanReturns, covMatrix, riskFreeRate=0)
-print("Optimal weights: ", result.x)
 print("Sharpe ratio: ", -result.fun)
+print("Optimal weights: ", result.x)
+
+print("-------------------------------------")
+
+minVarResult = minimizeVarianceSharpe(meanReturns, covMatrix)
+minVar, minVarWeights = minVarResult['fun'], minVarResult['x']
+print("Minimum Portfolio Variance", minVar)
+print("Optimal Weights", minVarResult['x'])
 
 
 '''
@@ -97,11 +129,18 @@ else:
     downsideDeviation = np.sqrt(np.dot(weights.T, np.dot(covMatrix.loc[meanReturns < mar, meanReturns < mar], weights))) * np.sqrt(252)
 sortinoRatio = (pReturns - mar) / downsideDeviation
 
-
+print("-------------------------------------")
 
 #print(maxSharpeRatio, maxWeights)
-print("Weights:", weights)
 print("Portfolio returns:", pReturns)
+print("Weights:", weights)
 print("Portfolio downside deviation:", downsideDeviation)
 print("Sortino ratio:", sortinoRatio)
+
+print("-------------------------------------")
+
+minVarResult = minimizeVarianceSortino(meanReturns, covMatrix)
+minVar, minVarWeights = minVarResult['fun'], minVarResult['x']
+print("Minimum Portfolio Variance", minVar)
+print("Optimal Weights", minVarResult['x'])
 
