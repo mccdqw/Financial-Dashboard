@@ -1,5 +1,5 @@
 import numpy as np
-import datetime as dt
+import pandas as pd
 import yfinance as yf
 import scipy.optimize as sc
 
@@ -99,6 +99,7 @@ weights = np.array([0.3, 0.5, 0.2])
 '''
 # Example usage
 meanReturns, covMatrix = getData(['AAPL', 'WMT', 'HD', 'AMZN'], '2021-01-01', '2022-01-01')
+'''
 result = maxSharpeRatio(meanReturns, covMatrix, riskFreeRate=0)
 print("Sharpe ratio: ", -result.fun)
 print("Optimal weights: ", result.x)
@@ -109,6 +110,7 @@ minVarResult = minimizeVarianceSharpe(meanReturns, covMatrix)
 minVar, minVarWeights = minVarResult['fun'], minVarResult['x']
 print("Minimum Portfolio Variance", minVar)
 print("Optimal Weights", minVarResult['x'])
+'''
 
 
 '''
@@ -144,3 +146,14 @@ minVar, minVarWeights = minVarResult['fun'], minVarResult['x']
 print("Minimum Portfolio Variance", minVar)
 print("Optimal Weights", minVarResult['x'])
 
+
+def calculatedResults(meanReturns, covMatrix, riskFreeRate=0, constraintSet=(0,1)):
+    # Read in mean, cov matrix, and other financial information
+    # Ouput max sharpe ratio, min volatility and efficient frontier
+    maxSharpeRatioPortfolio = maxSharpeRatio(meanReturns, covMatrix)
+    maxSharpeRatioReturns, maxSharpeRatioStd, maxSR = portfolioPerformance(maxSharpeRatioPortfolio['x'], meanReturns, covMatrix)
+    maxSharpeRatioAllocation = pd.DataFrame(maxSharpeRatioPortfolio['x'], index=meanReturns.index, columns=['allocation'])
+    maxSharpeRatioAllocation.allocation = [round(i*100, 0) for i in maxSharpeRatioAllocation.allocation]
+    return maxSharpeRatioReturns, maxSharpeRatioStd, maxSharpeRatioAllocation
+
+print(calculatedResults(meanReturns, covMatrix))
