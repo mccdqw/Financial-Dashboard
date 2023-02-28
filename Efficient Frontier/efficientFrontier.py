@@ -99,19 +99,6 @@ weights = np.array([0.3, 0.5, 0.2])
 '''
 # Example usage
 meanReturns, covMatrix = getData(['AAPL', 'WMT', 'HD', 'AMZN'], '2021-01-01', '2022-01-01')
-'''
-result = maxSharpeRatio(meanReturns, covMatrix, riskFreeRate=0)
-print("Sharpe ratio: ", -result.fun)
-print("Optimal weights: ", result.x)
-
-print("-------------------------------------")
-
-minVarResult = minimizeVarianceSharpe(meanReturns, covMatrix)
-minVar, minVarWeights = minVarResult['fun'], minVarResult['x']
-print("Minimum Portfolio Variance", minVar)
-print("Optimal Weights", minVarResult['x'])
-'''
-
 
 '''
     Sortino Ratio Calculation
@@ -133,7 +120,6 @@ sortinoRatio = (pReturns - mar) / downsideDeviation
 
 print("-------------------------------------")
 
-#print(maxSharpeRatio, maxWeights)
 print("Portfolio returns:", pReturns)
 print("Weights:", weights)
 print("Portfolio downside deviation:", downsideDeviation)
@@ -147,13 +133,56 @@ print("Minimum Portfolio Variance", minVar)
 print("Optimal Weights", minVarResult['x'])
 
 
+def portfolioReturn(weights, meanReturns, covMatrix):
+    return portfolioPerformance(weights, meanReturns, covMatrix)[0]
+    
+
+def efficientFrontierOpt(meanReturns, covMatrix, returnTarget, constraintSet=(0,1)):
+    '''
+        For each return target, we want to optimize the portfolio for minimum variance
+    '''
+    numAssets = len(meanReturns)
+    args = (meanReturns, covMatrix)
+    
+    # we are only interested in the top half of the efficient frontier
+    # above the min vol portfolio return
+    constraints = ({'type': 'eq', 'fun': lambda x: portfolioReturn(x, meanReturns, covMatrix) - returnTarget},
+                    {'type': 'eq', 'fun': lambda x: np.sum(x) - 1})
+    bounds = tuple(constraintSet for asset in range(numAssets))
+    efficientFrontierResult = sc.minimize(portfolioVarianceSharpe, numAssets*[1./numAssets], args=args,
+                                          method='SLSQP', bounds=bounds, constraints=constraints)
+    return efficientFrontierResult
+    
+    
+
+
 def calculatedResults(meanReturns, covMatrix, riskFreeRate=0, constraintSet=(0,1)):
     # Read in mean, cov matrix, and other financial information
     # Ouput max sharpe ratio, min volatility and efficient frontier
+    
+    # Max Sharpe Ratio Portfolio
     maxSharpeRatioPortfolio = maxSharpeRatio(meanReturns, covMatrix)
     maxSharpeRatioReturns, maxSharpeRatioStd, maxSR = portfolioPerformance(maxSharpeRatioPortfolio['x'], meanReturns, covMatrix)
+    maxSharpeRatioReturns, maxSharpeRatioStd = round(maxSharpeRatioReturns*100, 2), round(maxSharpeRatioStd*100, 2)
     maxSharpeRatioAllocation = pd.DataFrame(maxSharpeRatioPortfolio['x'], index=meanReturns.index, columns=['allocation'])
     maxSharpeRatioAllocation.allocation = [round(i*100, 0) for i in maxSharpeRatioAllocation.allocation]
-    return maxSharpeRatioReturns, maxSharpeRatioStd, maxSharpeRatioAllocation
+    
+    # Min Volatility Portfolio
+    minVolPortfolio = minimizeVarianceSharpe(meanReturns, covMatrix)
+    minVolReturns, minVolStd, minVol = portfolioPerformance(minVolPortfolio['x'], meanReturns, covMatrix)
+    minVolReturns, minVolStd = round(minVolReturns*100, 2), round(minVolStd*100, 2)
+    minVolAllocation = pd.DataFrame(minVolPortfolio['x'], index=meanReturns.index, columns=['allocation'])
+    minVolAllocation.allocation = [round(i*100, 0) for i in minVolAllocation.allocation]
+    
+    # get the curve of returns
+    
+    efficientFrontierList = []
+    targetReturns = np.linspace(minVolReturns, maxSharpeRatioReturns, 20)
+    for target in targetReturns:
+        # 'fun' returns the objective function value for the minimization problem
+        efficientFrontierList.append(efficientFrontierOpt(meanReturns, covMatrix, target)['fun'])
+    
+    return maxSharpeRatioReturns, maxSharpeRatioStd, maxSharpeRatioAllocation, minVolReturns, minVolStd, minVolAllocation, efficientFrontierList
 
 print(calculatedResults(meanReturns, covMatrix))
+#print(efficientFrontierOpt(meanReturns, covMatrix, 0.04))
