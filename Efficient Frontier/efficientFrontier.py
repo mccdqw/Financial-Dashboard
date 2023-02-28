@@ -2,6 +2,8 @@ import numpy as np
 import pandas as pd
 import yfinance as yf
 import scipy.optimize as sc
+import plotly.graph_objects as go
+import matplotlib.pyplot as plt
 
 
 def getData(stocks, start, end):
@@ -163,14 +165,12 @@ def calculatedResults(meanReturns, covMatrix, riskFreeRate=0, constraintSet=(0,1
     # Max Sharpe Ratio Portfolio
     maxSharpeRatioPortfolio = maxSharpeRatio(meanReturns, covMatrix)
     maxSharpeRatioReturns, maxSharpeRatioStd, maxSR = portfolioPerformance(maxSharpeRatioPortfolio['x'], meanReturns, covMatrix)
-    maxSharpeRatioReturns, maxSharpeRatioStd = round(maxSharpeRatioReturns*100, 2), round(maxSharpeRatioStd*100, 2)
     maxSharpeRatioAllocation = pd.DataFrame(maxSharpeRatioPortfolio['x'], index=meanReturns.index, columns=['allocation'])
     maxSharpeRatioAllocation.allocation = [round(i*100, 0) for i in maxSharpeRatioAllocation.allocation]
     
     # Min Volatility Portfolio
     minVolPortfolio = minimizeVarianceSharpe(meanReturns, covMatrix)
     minVolReturns, minVolStd, minVol = portfolioPerformance(minVolPortfolio['x'], meanReturns, covMatrix)
-    minVolReturns, minVolStd = round(minVolReturns*100, 2), round(minVolStd*100, 2)
     minVolAllocation = pd.DataFrame(minVolPortfolio['x'], index=meanReturns.index, columns=['allocation'])
     minVolAllocation.allocation = [round(i*100, 0) for i in minVolAllocation.allocation]
     
@@ -181,8 +181,51 @@ def calculatedResults(meanReturns, covMatrix, riskFreeRate=0, constraintSet=(0,1
     for target in targetReturns:
         # 'fun' returns the objective function value for the minimization problem
         efficientFrontierList.append(efficientFrontierOpt(meanReturns, covMatrix, target)['fun'])
+        
+    maxSharpeRatioReturns, maxSharpeRatioStd = round(maxSharpeRatioReturns*100, 2), round(maxSharpeRatioStd*100, 2)
+    minVolReturns, minVolStd = round(minVolReturns*100, 2), round(minVolStd*100, 2)
+
     
-    return maxSharpeRatioReturns, maxSharpeRatioStd, maxSharpeRatioAllocation, minVolReturns, minVolStd, minVolAllocation, efficientFrontierList
+    return maxSharpeRatioReturns, maxSharpeRatioStd, maxSharpeRatioAllocation, minVolReturns, minVolStd, minVolAllocation, efficientFrontierList, targetReturns
 
 print(calculatedResults(meanReturns, covMatrix))
-#print(efficientFrontierOpt(meanReturns, covMatrix, 0.04))
+
+def efficientFrontierGraph(meanReturns, covMatrix, riskFreeRate=0, constraintSet=(0,1)):
+    '''
+        Return a graph plotting the min vol, max sharpe ratio and efficient frontier
+    '''
+    maxSharpeRatioReturns, maxSharpeRatioStd, maxSharpeRatioAllocation, minVolReturns, minVolStd, minVolAllocation, efficientFrontierList, targetReturns = calculatedResults(meanReturns, covMatrix, riskFreeRate, constraintSet)
+    
+    # Max Sharpe Ratio
+    MaxSharpeRatio = go.Scatter(name='Maximum Sharpe Ratio', mode='markers',
+                                x=[maxSharpeRatioStd], y=[maxSharpeRatioReturns],
+                                marker=dict(color='red', size=14, line=dict(width=3, color='black')))
+    MinVol = go.Scatter(name='Minimum Volatility', mode='markers',
+                                x=[minVolStd], y=[minVolReturns],
+                                marker=dict(color='green', size=14, line=dict(width=3, color='black')))
+    EfficientFrontierCurve = go.Scatter(name='EfficientFrontier', mode='lines',
+                                x=[round(efficientFrontierStd*100, 2) for efficientFrontierStd in efficientFrontierList], y=[round(target*100, 2) for target in targetReturns],
+                                line=dict(color='black', width=4, dash='dashdot'))
+    data = [MaxSharpeRatio, MinVol, EfficientFrontierCurve]
+    
+    layout = go.Layout(
+            title='Portfolio Optimization with the Efficient Frontier',
+            yaxis=dict(title='Annualized Return (%)'),
+            xaxis=dict(title='Annualized Volatility (%)'),
+            showlegend=True,
+            legend=dict(
+                x=0.75, y=0, traceorder='normal',
+                bgcolor='#E2E2E2', bordercolor='black',
+                borderwidth=2
+            ),
+            width=800,
+            height=600
+    )
+    fig = go.Figure(data=data, layout=layout)
+    return fig
+
+fig = efficientFrontierGraph(meanReturns, covMatrix)
+fig.write_image('figure.png')
+plt.imshow(plt.imread('figure.png'))
+plt.show()
+
